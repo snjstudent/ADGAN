@@ -9,6 +9,8 @@ import os
 import torchvision.models.vgg as models
 
 # Moddfied with AdINGen
+
+
 class ADGen(nn.Module):
     # AdaIN auto-encoder architecture
     def __init__(self, input_dim, dim, style_dim, n_downsample, n_res, mlp_dim, activ='relu', pad_type='reflect'):
@@ -17,18 +19,23 @@ class ADGen(nn.Module):
         # style encoder
         input_dim = 3
         SP_input_nc = 8
-        self.enc_style = VggStyleEncoder(3, input_dim, dim, int(style_dim/SP_input_nc), norm='none', activ=activ, pad_type=pad_type)
+        self.enc_style = VggStyleEncoder(3, input_dim, dim, int(
+            style_dim/SP_input_nc), norm='none', activ=activ, pad_type=pad_type)
 
         # content encoder
         input_dim = 18
-        self.enc_content = ContentEncoder(n_downsample, n_res, input_dim, dim, 'in', activ, pad_type=pad_type)
+        self.enc_content = ContentEncoder(
+            n_downsample, n_res, input_dim, dim, 'in', activ, pad_type=pad_type)
         input_dim = 3
-        self.dec = Decoder(n_downsample, n_res, self.enc_content.output_dim, input_dim, res_norm='adain', activ=activ, pad_type=pad_type)
+        self.dec = Decoder(n_downsample, n_res, self.enc_content.output_dim,
+                           input_dim, res_norm='adain', activ=activ, pad_type=pad_type)
 
-        self.fc = LinearBlock(style_dim, style_dim, norm='none', activation=activ)
+        self.fc = LinearBlock(style_dim, style_dim,
+                              norm='none', activation=activ)
 
         # fusion module
-        self.mlp = MLP(style_dim, self.get_num_adain_params(self.dec), mlp_dim, 3, norm='none', activ=activ)
+        self.mlp = MLP(style_dim, self.get_num_adain_params(
+            self.dec), mlp_dim, 3, norm='none', activ=activ)
 
     def forward(self, img_A, img_B, sem_B):
         # reconstruct an image
@@ -75,30 +82,35 @@ class VggStyleEncoder(nn.Module):
         super(VggStyleEncoder, self).__init__()
         # self.vgg = models.vgg19(pretrained=True).features
         vgg19 = models.vgg19(pretrained=False)
-        vgg19.load_state_dict(torch.load('/home1/menyf/data/deepfashion/vgg19-dcbb9e9d.pth'))
+        vgg19.load_state_dict(torch.load('deepfashion/vgg19-dcbb9e9d.pth'))
         self.vgg = vgg19.features
 
         for param in self.vgg.parameters():
             param.requires_grad_(False)
 
-        self.conv1 = Conv2dBlock(input_dim, dim, 7, 1, 3, norm=norm, activation=activ, pad_type=pad_type) # 3->64,concat
+        self.conv1 = Conv2dBlock(input_dim, dim, 7, 1, 3, norm=norm,
+                                 activation=activ, pad_type=pad_type)  # 3->64,concat
         dim = dim*2
-        self.conv2 = Conv2dBlock(dim , dim, 4, 2, 1, norm=norm, activation=activ, pad_type=pad_type) # 128->128
+        self.conv2 = Conv2dBlock(
+            dim, dim, 4, 2, 1, norm=norm, activation=activ, pad_type=pad_type)  # 128->128
         dim = dim*2
-        self.conv3 = Conv2dBlock(dim , dim, 4, 2, 1, norm=norm, activation=activ, pad_type=pad_type) # 256->256
+        self.conv3 = Conv2dBlock(
+            dim, dim, 4, 2, 1, norm=norm, activation=activ, pad_type=pad_type)  # 256->256
         dim = dim * 2
-        self.conv4 = Conv2dBlock(dim, dim, 4, 2, 1, norm=norm, activation=activ, pad_type=pad_type)  # 512->512
+        self.conv4 = Conv2dBlock(
+            dim, dim, 4, 2, 1, norm=norm, activation=activ, pad_type=pad_type)  # 512->512
         dim = dim * 2
 
         self.model = []
-        self.model += [nn.AdaptiveAvgPool2d(1)] # global average pooling
+        self.model += [nn.AdaptiveAvgPool2d(1)]  # global average pooling
         self.model += [nn.Conv2d(dim, style_dim, 1, 1, 0)]
         self.model = nn.Sequential(*self.model)
         self.output_dim = dim
 
-    def get_features(self,image, model, layers=None):
+    def get_features(self, image, model, layers=None):
         if layers is None:
-            layers = {'0': 'conv1_1', '5': 'conv2_1', '10': 'conv3_1', '19': 'conv4_1'}
+            layers = {'0': 'conv1_1', '5': 'conv2_1',
+                      '10': 'conv3_1', '19': 'conv4_1'}
         features = {}
         x = image
         # model._modules is a dictionary holding each module in the model
@@ -140,18 +152,22 @@ class ContentEncoder(nn.Module):
     def __init__(self, n_downsample, n_res, input_dim, dim, norm, activ, pad_type):
         super(ContentEncoder, self).__init__()
         self.model = []
-        self.model += [Conv2dBlock(input_dim, dim, 7, 1, 3, norm=norm, activation=activ, pad_type=pad_type)]
+        self.model += [Conv2dBlock(input_dim, dim, 7, 1, 3,
+                                   norm=norm, activation=activ, pad_type=pad_type)]
         # downsampling blocks
         for i in range(n_downsample):
-            self.model += [Conv2dBlock(dim, 2 * dim, 4, 2, 1, norm=norm, activation=activ, pad_type=pad_type)]
+            self.model += [Conv2dBlock(dim, 2 * dim, 4, 2, 1,
+                                       norm=norm, activation=activ, pad_type=pad_type)]
             dim *= 2
         # residual blocks
-        self.model += [ResBlocks(n_res, dim, norm=norm, activation=activ, pad_type=pad_type)]
+        self.model += [ResBlocks(n_res, dim, norm=norm,
+                                 activation=activ, pad_type=pad_type)]
         self.model = nn.Sequential(*self.model)
         self.output_dim = dim
 
     def forward(self, x):
         return self.model(x)
+
 
 class Decoder(nn.Module):
     def __init__(self, n_upsample, n_res, dim, output_dim, res_norm='adain', activ='relu', pad_type='zero'):
@@ -159,19 +175,20 @@ class Decoder(nn.Module):
 
         self.model = []
         # AdaIN residual blocks
-        self.model += [ResBlocks(n_res, dim, res_norm, activ, pad_type=pad_type)]
+        self.model += [ResBlocks(n_res, dim, res_norm,
+                                 activ, pad_type=pad_type)]
         # upsampling blocks
         for i in range(n_upsample):
             self.model += [nn.Upsample(scale_factor=2),
                            Conv2dBlock(dim, dim // 2, 5, 1, 2, norm='ln', activation=activ, pad_type=pad_type)]
             dim //= 2
         # use reflection padding in the last conv layer
-        self.model += [Conv2dBlock(dim, output_dim, 7, 1, 3, norm='none', activation='tanh', pad_type=pad_type)]
+        self.model += [Conv2dBlock(dim, output_dim, 7, 1, 3,
+                                   norm='none', activation='tanh', pad_type=pad_type)]
         self.model = nn.Sequential(*self.model)
 
     def forward(self, x):
         return self.model(x)
-
 
 
 ##################################################################################
@@ -182,21 +199,26 @@ class ResBlocks(nn.Module):
         super(ResBlocks, self).__init__()
         self.model = []
         for i in range(num_blocks):
-            self.model += [ResBlock(dim, norm=norm, activation=activation, pad_type=pad_type)]
+            self.model += [ResBlock(dim, norm=norm,
+                                    activation=activation, pad_type=pad_type)]
         self.model = nn.Sequential(*self.model)
 
     def forward(self, x):
         return self.model(x)
+
 
 class MLP(nn.Module):
     def __init__(self, input_dim, output_dim, dim, n_blk, norm='none', activ='relu'):
 
         super(MLP, self).__init__()
         self.model = []
-        self.model += [LinearBlock(input_dim, dim, norm=norm, activation=activ)]
+        self.model += [LinearBlock(input_dim, dim,
+                                   norm=norm, activation=activ)]
         for i in range(n_blk - 2):
             self.model += [LinearBlock(dim, dim, norm=norm, activation=activ)]
-        self.model += [LinearBlock(dim, output_dim, norm='none', activation='none')] # no output activations
+        # no output activations
+        self.model += [LinearBlock(dim, output_dim,
+                                   norm='none', activation='none')]
         self.model = nn.Sequential(*self.model)
 
     def forward(self, x):
@@ -205,13 +227,17 @@ class MLP(nn.Module):
 ##################################################################################
 # Basic Blocks
 ##################################################################################
+
+
 class ResBlock(nn.Module):
     def __init__(self, dim, norm='in', activation='relu', pad_type='zero'):
         super(ResBlock, self).__init__()
 
         model = []
-        model += [Conv2dBlock(dim ,dim, 3, 1, 1, norm=norm, activation=activation, pad_type=pad_type)]
-        model += [Conv2dBlock(dim ,dim, 3, 1, 1, norm=norm, activation='none', pad_type=pad_type)]
+        model += [Conv2dBlock(dim, dim, 3, 1, 1, norm=norm,
+                              activation=activation, pad_type=pad_type)]
+        model += [Conv2dBlock(dim, dim, 3, 1, 1, norm=norm,
+                              activation='none', pad_type=pad_type)]
         self.model = nn.Sequential(*model)
 
     def forward(self, x):
@@ -220,8 +246,9 @@ class ResBlock(nn.Module):
         out += residual
         return out
 
+
 class Conv2dBlock(nn.Module):
-    def __init__(self, input_dim ,output_dim, kernel_size, stride,
+    def __init__(self, input_dim, output_dim, kernel_size, stride,
                  padding=0, norm='none', activation='relu', pad_type='zero'):
         super(Conv2dBlock, self).__init__()
         self.use_bias = True
@@ -269,9 +296,11 @@ class Conv2dBlock(nn.Module):
 
         # initialize convolution
         if norm == 'sn':
-            self.conv = SpectralNorm(nn.Conv2d(input_dim, output_dim, kernel_size, stride, bias=self.use_bias))
+            self.conv = SpectralNorm(
+                nn.Conv2d(input_dim, output_dim, kernel_size, stride, bias=self.use_bias))
         else:
-            self.conv = nn.Conv2d(input_dim, output_dim, kernel_size, stride, bias=self.use_bias)
+            self.conv = nn.Conv2d(input_dim, output_dim,
+                                  kernel_size, stride, bias=self.use_bias)
 
     def forward(self, x):
         x = self.conv(self.pad(x))
@@ -288,7 +317,8 @@ class LinearBlock(nn.Module):
         use_bias = True
         # initialize fully connected layer
         if norm == 'sn':
-            self.fc = SpectralNorm(nn.Linear(input_dim, output_dim, bias=use_bias))
+            self.fc = SpectralNorm(
+                nn.Linear(input_dim, output_dim, bias=use_bias))
         else:
             self.fc = nn.Linear(input_dim, output_dim, bias=use_bias)
 
@@ -394,6 +424,7 @@ class LayerNorm(nn.Module):
             x = x * self.gamma.view(*shape) + self.beta.view(*shape)
         return x
 
+
 def l2normalize(v, eps=1e-12):
     return v / (v.norm() + eps)
 
@@ -403,6 +434,7 @@ class SpectralNorm(nn.Module):
     Based on the paper "Spectral Normalization for Generative Adversarial Networks" by Takeru Miyato, Toshiki Kataoka, Masanori Koyama, Yuichi Yoshida
     and the Pytorch implementation https://github.com/christiancosgrove/pytorch-spectral-normalization-gan
     """
+
     def __init__(self, module, name='weight', power_iterations=1):
         super(SpectralNorm, self).__init__()
         self.module = module
@@ -418,8 +450,9 @@ class SpectralNorm(nn.Module):
 
         height = w.data.shape[0]
         for _ in range(self.power_iterations):
-            v.data = l2normalize(torch.mv(torch.t(w.view(height,-1).data), u.data))
-            u.data = l2normalize(torch.mv(w.view(height,-1).data, v.data))
+            v.data = l2normalize(
+                torch.mv(torch.t(w.view(height, -1).data), u.data))
+            u.data = l2normalize(torch.mv(w.view(height, -1).data, v.data))
 
         # sigma = torch.dot(u.data, torch.mv(w.view(height,-1).data, v.data))
         sigma = u.dot(w.view(height, -1).mv(v))
@@ -433,7 +466,6 @@ class SpectralNorm(nn.Module):
             return True
         except AttributeError:
             return False
-
 
     def _make_params(self):
         w = getattr(self.module, self.name)
@@ -453,9 +485,6 @@ class SpectralNorm(nn.Module):
         self.module.register_parameter(self.name + "_v", v)
         self.module.register_parameter(self.name + "_bar", w_bar)
 
-
     def forward(self, *args):
         self._update_u_v()
         return self.module.forward(*args)
-
-
